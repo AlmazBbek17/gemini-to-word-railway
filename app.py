@@ -465,11 +465,81 @@ def _read_group_or_char(s, pos):
         return (s[pos], pos+1)
 
 
+
+
+
+
+
+
+
+def make_matrix(env, rows_data):
+    beg_map = {'pmatrix': '(', 'bmatrix': '[', 'vmatrix': '|', 'matrix': ''}
+    end_map = {'pmatrix': ')', 'bmatrix': ']', 'vmatrix': '|', 'matrix': ''}
+    beg = beg_map.get(env, '(')
+    end = end_map.get(env, ')')
+    m = make_el(MATH_NS, 'm')
+    mpr = sub_el(m, MATH_NS, 'mPr')
+    ncols = max(len(r) for r in rows_data) if rows_data else 1
+    mcs = sub_el(mpr, MATH_NS, 'mcs')
+    mc_el = sub_el(mcs, MATH_NS, 'mc')
+    mcpr = sub_el(mc_el, MATH_NS, 'mcPr')
+    count_el = sub_el(mcpr, MATH_NS, 'count')
+    count_el.set(f'{{{MATH_NS}}}val', str(ncols))
+    mcjc = sub_el(mcpr, MATH_NS, 'mcJc')
+    mcjc.set(f'{{{MATH_NS}}}val', 'center')
+    for row in rows_data:
+        mr = sub_el(m, MATH_NS, 'mr')
+        for cell_latex in row:
+            e = sub_el(mr, MATH_NS, 'e')
+            for el in (parse_latex(cell_latex.strip()) or [make_run(' ')]):
+                e.append(el)
+        for _ in range(ncols - len(row)):
+            e = sub_el(mr, MATH_NS, 'e')
+            e.append(make_run(' '))
+    if beg and end:
+        return make_delim([m], beg, end)
+    return m
+
+
+def parse_matrix_env(latex):
+    s = latex.strip()
+    if not s.startswith(chr(92) + 'begin{'):
+        return None
+    brace_end = s.find('}', 7)
+    if brace_end < 0:
+        return None
+    env = s[7:brace_end]
+    if env not in ('pmatrix', 'bmatrix', 'vmatrix', 'matrix', 'smallmatrix'):
+        return None
+    end_tag = chr(92) + 'end{' + env + '}'
+    body_start = brace_end + 1
+    body_end = s.find(end_tag)
+    if body_end < 0:
+        return None
+    body = s[body_start:body_end]
+    # rows separated by double backslash
+    raw_rows = body.split(chr(92) + chr(92))
+    rows_data = []
+    for row in raw_rows:
+        row = row.strip()
+        if not row:
+            continue
+        cells = row.split('&')
+        rows_data.append([c.strip() for c in cells])
+    if not rows_data:
+        return None
+    return make_matrix(env, rows_data)
+
+
 def build_omath(latex):
     omath = make_el(MATH_NS, 'oMath')
-    elements = parse_latex(latex)
-    for el in elements:
-        omath.append(el)
+    mat = parse_matrix_env(latex.strip())
+    if mat is not None:
+        omath.append(mat)
+    else:
+        elements = parse_latex(latex)
+        for el in elements:
+            omath.append(el)
     return omath
 
 
@@ -607,6 +677,26 @@ def _table_with_math(doc, tlines):
                         run.bold = True
 
 
+def _has_emoji(text):
+    import unicodedata
+    for ch in text:
+        cp = ord(ch)
+        if (0x1F300 <= cp <= 0x1FAFF) or (0x2600 <= cp <= 0x27BF) or (0x2300 <= cp <= 0x23FF):
+            return True
+    return False
+
+
+def _add_run_with_emoji(para, text, bold=False, italic=False):
+    """Add run with Segoe UI Emoji font if text contains emoji."""
+    if not text:
+        return
+    r = para.add_run(text)
+    r.bold = bold
+    r.italic = italic
+    if _has_emoji(text):
+        r.font.name = 'Segoe UI Emoji'
+
+
 def _fmt(para, text):
     bparts = re.split(r'\*\*(.+?)\*\*', text)
     for i, bp in enumerate(bparts):
@@ -614,13 +704,11 @@ def _fmt(para, text):
             iparts = re.split(r'\*(.+?)\*', bp)
             for j, ip in enumerate(iparts):
                 if j % 2 == 0:
-                    if ip: para.add_run(ip)
+                    if ip: _add_run_with_emoji(para, ip)
                 else:
-                    r = para.add_run(ip)
-                    r.italic = True
+                    _add_run_with_emoji(para, ip, italic=True)
         else:
-            r = para.add_run(bp)
-            r.bold = True
+            _add_run_with_emoji(para, bp, bold=True)
 
 
 def _code(doc, code):
