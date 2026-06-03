@@ -208,15 +208,16 @@ def parse_latex(latex):
     elements = []
     i = 0
     s = latex.strip()
-    max_iterations = len(s) * 3 + 100  # защита от зависания
+    max_iterations = len(s) * 3 + 100
     iterations = 0
-    
+
     while i < len(s):
         iterations += 1
         if iterations > max_iterations:
-            # если зависли — просто вернуть текст как есть
             elements.append(make_run(s[i:], italic=False))
             break
+
+        c = s[i]
 
         if c == ' ':
             i += 1
@@ -479,7 +480,6 @@ def insert_math(paragraph, latex):
         return True
     except Exception as e:
         print(f'Math error "{latex}": {e}')
-        traceback.print_exc()
         r = paragraph.add_run(latex)
         r.font.name = 'Cambria Math'
         r.italic = True
@@ -652,17 +652,10 @@ def _img(doc, src, alt=''):
         r.italic = True
 
 
-# =============================================
-# Routes
-# =============================================
-
 @app.route('/', methods=['GET'])
 @app.route('/api/export-chat', methods=['GET'])
 def health():
-    return jsonify({
-        'status': 'OK',
-        'version': '5.0-flask',
-    })
+    return jsonify({'status': 'OK', 'version': '5.0-flask'})
 
 
 @app.route('/api/export-chat', methods=['POST'])
