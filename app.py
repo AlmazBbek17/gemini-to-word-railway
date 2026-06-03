@@ -208,9 +208,15 @@ def parse_latex(latex):
     elements = []
     i = 0
     s = latex.strip()
-
+    max_iterations = len(s) * 3 + 100  # защита от зависания
+    iterations = 0
+    
     while i < len(s):
-        c = s[i]
+        iterations += 1
+        if iterations > max_iterations:
+            # если зависли — просто вернуть текст как есть
+            elements.append(make_run(s[i:], italic=False))
+            break
 
         if c == ' ':
             i += 1
