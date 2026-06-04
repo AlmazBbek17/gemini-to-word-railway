@@ -504,7 +504,8 @@ def make_matrix(env, rows_data):
 
 def parse_matrix_env(latex):
     s = latex.strip()
-    if not s.startswith(chr(92) + 'begin{'):
+    bs = chr(92)
+    if not s.startswith(bs + 'begin{'):
         return None
     brace_end = s.find('}', 7)
     if brace_end < 0:
@@ -512,14 +513,19 @@ def parse_matrix_env(latex):
     env = s[7:brace_end]
     if env not in ('pmatrix', 'bmatrix', 'vmatrix', 'matrix', 'smallmatrix'):
         return None
-    end_tag = chr(92) + 'end{' + env + '}'
+    end_tag = bs + 'end{' + env + '}'
     body_start = brace_end + 1
     body_end = s.find(end_tag)
     if body_end < 0:
         return None
     body = s[body_start:body_end]
-    # rows separated by double backslash
-    raw_rows = body.split(chr(92) + chr(92))
+    # rows separated by \\ or newlines
+    double_bs = bs + bs
+    if double_bs in body:
+        raw_rows = body.split(double_bs)
+    else:
+        # fallback: split by newline (when content came from multiline $$ block)
+        raw_rows = body.split('\n')
     rows_data = []
     for row in raw_rows:
         row = row.strip()
@@ -631,8 +637,14 @@ def process_content(doc, content):
             while i < len(lines) and lines[i].strip() != '$$':
                 fl.append(lines[i])
                 i += 1
-            latex = ' '.join(fl).strip()
-            if latex:
+            raw = '\n'.join(fl).strip()
+            if raw:
+                # If contains matrix environment, keep newlines; otherwise join with space
+                if '\\begin{' in raw:
+                    # Convert newlines between matrix rows to \\\\ if not already there
+                    latex = raw
+                else:
+                    latex = ' '.join(fl).strip()
                 add_block_formula(doc, latex)
             i += 1
             continue
