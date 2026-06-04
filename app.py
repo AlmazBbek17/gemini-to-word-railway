@@ -192,6 +192,7 @@ SYMBOLS = {
     r'\cup': '∪', r'\cap': '∩', r'\emptyset': '∅',
     r'\circ': '∘', r'\bullet': '•', r'\star': '⋆',
     r'\prime': '′', r'\angle': '∠', r'\perp': '⊥', r'\parallel': '∥',
+    r'\quad': ' ', r'\qquad': '  ',
 }
 
 FUNCTIONS = {
@@ -533,13 +534,33 @@ def parse_matrix_env(latex):
 
 def build_omath(latex):
     omath = make_el(MATH_NS, 'oMath')
-    mat = parse_matrix_env(latex.strip())
+    s = latex.strip()
+
+    # Full expression is a matrix
+    mat = parse_matrix_env(s)
     if mat is not None:
         omath.append(mat)
-    else:
-        elements = parse_latex(latex)
-        for el in elements:
-            omath.append(el)
+        return omath
+
+    # Expression contains \\begin{ somewhere (prefix + matrix)
+    begin_idx = s.find(chr(92) + 'begin{')
+    if begin_idx >= 0:
+        prefix = s[:begin_idx].strip()
+        rest = s[begin_idx:]
+        if prefix:
+            for el in (parse_latex(prefix) or []):
+                omath.append(el)
+        mat2 = parse_matrix_env(rest)
+        if mat2 is not None:
+            omath.append(mat2)
+        else:
+            for el in (parse_latex(rest) or []):
+                omath.append(el)
+        return omath
+
+    elements = parse_latex(latex)
+    for el in elements:
+        omath.append(el)
     return omath
 
 
@@ -557,6 +578,10 @@ def insert_math(paragraph, latex):
 
 
 def add_block_formula(doc, latex):
+    """Add a block (display) formula. Handles multiple formulas separated by \\quad or \\,."""
+    # Replace \quad and \qquad with spaces for splitting display formulas
+    # But first handle matrix environments which may contain these
+    latex = latex.strip()
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     insert_math(p, latex)
